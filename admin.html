@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>แดชบอร์ด / ระบบหลังบ้าน</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="locked">
+<div class="admin-wrap">
+  <div class="admin-top">
+    <h1>⚙ แดชบอร์ด / ระบบหลังบ้าน</h1>
+    <a class="footlink" href="index.html">← กลับหน้าบันทึกเลข</a>
+    <span class="spacer"></span>
+    <span id="keyStatus" class="muted"></span>
+    <button id="keyBtn" style="min-height:38px;padding:6px 14px;font-size:15px">🔑 เปลี่ยนคีย์</button>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="lbl">งวดที่เก็บไว้</div><div class="val" id="cDates">-</div></div>
+    <div class="card"><div class="lbl">คีย์ที่ใช้งานได้</div><div class="val" id="cActive">-</div></div>
+    <div class="card"><div class="lbl">คีย์ทั้งหมด</div><div class="val" id="cTotal">-</div></div>
+    <div class="card"><div class="lbl">เวลาเซิร์ฟเวอร์ (real-time)</div><div class="val" id="cTime" style="font-size:16px">-</div></div>
+  </div>
+
+  <table class="admin">
+    <thead>
+      <tr><th>วันที่งวด</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>จำนวนรายการ</th><th>ยอดรวม</th><th>ลบงวด</th></tr>
+    </thead>
+    <tbody id="dateRows"><tr><td colspan="5" class="muted">กำลังโหลด...</td></tr></tbody>
+  </table>
+
+  <div class="detail" id="detail">
+    <h3 id="detailTitle"></h3>
+    <div id="detailBody" class="scroll" style="height:auto;max-height:420px;background:#eee"></div>
+  </div>
+</div>
+
+<div id="lockOverlay" class="lock-overlay">
+  <div class="lock-box">
+    <h2>🔑 ใส่คีย์เพื่อดูระบบหลังบ้าน</h2>
+    <p>หน้านี้ต้องใช้คีย์เดียวกับหน้าบันทึก<br>ขอคีย์ได้จากบอท Discord พิมพ์ <b>/getkey</b></p>
+    <input id="keyInput" placeholder="XXX-XXX" autocomplete="off" maxlength="150" inputmode="text">
+    <label class="remember"><input type="checkbox" id="rememberKey" checked> จำคีย์นี้ไว้</label>
+    <button id="keySubmit" class="primary">เข้าดู</button>
+    <div id="keyMsg"></div>
+    <a class="adminlink" href="index.html">← กลับหน้าบันทึกเลข</a>
+  </div>
+</div>
+
+<script src="admin.js"></script>
+</body>
+</html>

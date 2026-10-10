@@ -1,0 +1,84 @@
+*{box-sizing:border-box}
+body{margin:0;background:#ededed;color:#222;font-family:Tahoma,"Noto Sans Thai",sans-serif}
+main{max-width:1750px;margin:auto;padding:12px}
+.top,.entry,footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fafafa;border:1px solid #aaa;padding:12px}
+label{font-size:18px;display:flex;flex-direction:column;gap:4px}
+input{font:inherit;font-size:20px;min-height:44px;padding:8px 10px;border:2px solid #999;background:white}
+.top input{width:180px}
+#billNo{width:85px;text-align:center}
+#roundTitle{font-size:27px;font-weight:bold;margin-left:auto}
+button{font:inherit;font-size:18px;min-height:46px;padding:10px 22px;border:1px solid #999;background:#ddd;cursor:pointer}
+button:hover{filter:brightness(.96)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.primary{background:#dcefff}
+.danger{background:#ffdede}
+.tod{background:#ffe0b3;font-weight:bold}
+.entry{margin-top:10px}
+.entry input{width:125px}
+.entry label:first-child input{width:100px;font-size:30px;text-align:center}
+.total{margin:10px 0;background:white;border:2px solid #999;text-align:center;padding:10px}
+.total div{font-size:25px}
+.total strong{display:block;font-size:70px;line-height:1.1;color:#1478d4}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;min-height:560px}
+.grid article{background:#f8f8f8;border:1px solid #aaa;padding:10px}
+.grid h2{font-size:22px;margin:0 0 8px;border-bottom:1px solid #aaa;padding-bottom:6px}
+.scroll{height:480px;overflow:auto;background:#bbb;padding:7px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;border:1px solid #999;margin-bottom:6px;padding:9px;cursor:pointer}
+.row:hover{background:#fff0c7}
+.row .num{min-width:70px;font-size:24px;font-weight:bold}
+.row .todtag{font-size:14px;color:#666;font-weight:normal}
+.row .vals{flex:1;font-size:15px;line-height:1.4}
+.row .sum{min-width:120px;text-align:right;font-weight:bold;font-size:16px}
+#saveState{margin-left:auto;color:#555}
+#keyStatus{font-size:13px;color:#555}
+#keyBtn{background:#fff3cd}
+.footlink{font-size:15px;color:#1478d4;text-decoration:none;padding:0 6px}
+.footlink:hover{text-decoration:underline}
+
+/* ============ LOCK OVERLAY (หน้าใส่คีย์) ============ */
+body.locked main{filter:blur(8px);pointer-events:none;user-select:none}
+.lock-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:9999}
+.lock-box{background:#fff;padding:28px 32px;border-radius:12px;width:360px;max-width:92vw;text-align:center;box-shadow:0 12px 44px rgba(0,0,0,.45)}
+.lock-box h2{margin:0 0 6px;font-size:22px}
+.lock-box p{margin:0 0 14px;color:#666;font-size:14px;line-height:1.5}
+.lock-box input{width:100%;font-size:22px;text-align:center;letter-spacing:2px;margin-bottom:10px;text-transform:uppercase}
+.lock-box .remember{flex-direction:row;align-items:center;justify-content:center;gap:6px;font-size:14px;margin-bottom:10px;color:#444}
+.lock-box .remember input{width:auto;min-height:0;margin:0}
+.lock-box button{width:100%}
+#keyMsg{margin-top:10px;font-size:14px;min-height:20px;color:#c00;font-weight:bold}
+.adminlink{display:block;margin-top:12px;font-size:13px;color:#1478d4;text-decoration:none}
+.adminlink:hover{text-decoration:underline}
+
+/* ============ ADMIN / DASHBOARD ============ */
+.admin-wrap{max-width:1100px;margin:auto;padding:16px}
+.admin-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fafafa;border:1px solid #aaa;padding:12px;margin-bottom:14px}
+.admin-top h1{font-size:22px;margin:0}
+.admin-top .spacer{margin-left:auto}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.card{background:#fff;border:1px solid #aaa;padding:14px 16px;border-radius:8px}
+.card .lbl{font-size:13px;color:#666}
+.card .val{font-size:30px;font-weight:bold;color:#1478d4;margin-top:4px}
+table.admin{width:100%;border-collapse:collapse;background:#fff;font-size:15px}
+table.admin th,table.admin td{border:1px solid #bbb;padding:8px 10px;text-align:center}
+table.admin th{background:#e8e8e8}
+table.admin tr.clickable{cursor:pointer}
+table.admin tr.clickable:hover{background:#fff0c7}
+.detail{margin-top:14px;background:#fff;border:1px solid #aaa;padding:12px;display:none}
+.detail.show{display:block}
+.detail h3{margin:0 0 8px;font-size:18px}
+.muted{color:#777;font-size:13px}
+
+@media(max-width:1150px){.grid{grid-template-columns:1fr 1fr}#roundTitle{width:100%;margin-left:0}}
+@media(max-width:700px){.grid{grid-template-columns:1fr}.total strong{font-size:54px}.top input{width:150px}}
+
+/* หมวดหมู่ บน/ล่าง/ตรง/โต๊ด ให้เห็นชัด: ตัวหนา + สี */
+.entry label{font-weight:bold;font-size:19px}
+.cat{font-weight:bold}
+.c0{color:#1478d4}
+.c1{color:#1a9e4e}
+.c2{color:#e08a00}
+.c3{color:#d4380d}
+.c4{color:#722ed1}
+.row .vals{font-size:17px}
+button.delDate{min-height:32px;padding:4px 10px;font-size:13px;background:#ffdede;border:1px solid #c33;color:#a00}
+button.delDate:hover{background:#ffc5c5}

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>โปรแกรมคิดยอดตัวเลข</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="locked">
+<main>
+<header class="top">
+  <button id="newRound">เริ่มงวดใหม่</button>
+  <label>เลขที่บิล<input id="billNo" value="0"></label>
+  <label>ลูกค้า<input id="customer"></label>
+  <label>วันที่งวด<input type="date" id="roundDate"></label>
+  <button id="useDate">ใช้วันที่</button>
+  <div id="roundTitle">งวดประจำวันที่ -</div>
+</header>
+<section class="entry">
+  <label>เลข<input id="number" maxlength="3" inputmode="numeric" autofocus autocomplete="off"></label>
+  <label>2 ตัวบน<input id="cat1" inputmode="decimal" autocomplete="off"></label>
+  <label>2 ตัวล่าง<input id="cat2" inputmode="decimal" autocomplete="off"></label>
+  <label>3 ตัวตรง<input id="cat3" inputmode="decimal" autocomplete="off"></label>
+  <label>3 ตัวโต๊ด<input id="cat4" inputmode="decimal" autocomplete="off"></label>
+  <label>3 ตัวล่าง<input id="cat5" inputmode="decimal" autocomplete="off"></label>
+  <button id="addBtn" class="primary">เพิ่มรายการ</button>
+  <button id="btn6back" class="tod">6 กลับ</button>
+  <button id="btn3back" class="tod">3 กลับ</button>
+</section>
+<section class="total">
+  <div>ยอดรวมทั้งหมด</div>
+  <strong id="grandTotal">0.00</strong>
+</section>
+<section class="grid">
+  <article><h2>ประวัติการบันทึก</h2><div id="history" class="scroll"></div></article>
+  <article><h2>รายการ 2 หลัก</h2><div id="list2" class="scroll"></div></article>
+  <article><h2>รายการ 3 หลัก</h2><div id="list3" class="scroll"></div></article>
+</section>
+<footer>
+  <button id="keyBtn" title="เปลี่ยนคีย์เข้าระบบ">🔑 คีย์</button>
+  <span id="keyStatus"></span>
+  <a class="footlink" href="admin.html">⚙ แดชบอร์ด</a>
+  <button id="exportCsv">ส่งออก CSV</button>
+  <button id="clearAll" class="danger">ล้างทั้งหมด</button>
+  <span id="saveState">บันทึกอัตโนมัติ</span>
+</footer>
+</main>
+
+<!-- หน้าล็อก: ใส่คีย์ถึงจะเข้าระบบได้ -->
+<div id="lockOverlay" class="lock-overlay">
+  <div class="lock-box">
+    <h2>🔑 ใส่คีย์เพื่อเข้าระบบ</h2>
+    <p id="lockSub">ระบบต้องใช้คีย์จึงจะเข้าใช้งานได้<br>ขอคีย์ได้จากบอท Discord พิมพ์ <b>/getkey</b></p>
+    <input id="keyInput" placeholder="XXX-XXX" autocomplete="off" maxlength="150" inputmode="text">
+    <label class="remember"><input type="checkbox" id="rememberKey" checked> จำคีย์นี้ไว้ (ไม่ต้องใส่ซ้ำ)</label>
+    <button id="keySubmit" class="primary">เข้าระบบ</button>
+    <div id="keyMsg"></div>
+    <a class="adminlink" href="admin.html">⚙ ไปแดชบอร์ด / ระบบหลังบ้าน</a>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
