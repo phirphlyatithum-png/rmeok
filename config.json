@@ -1,0 +1,7 @@
+{
+  "discord_token": "",
+  "guild_id": "",
+  "admin_ids": [],
+  "tunnel_protocol": "auto",
+  "tunnel_extra_args": ""
+}

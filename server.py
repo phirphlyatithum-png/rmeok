@@ -17,7 +17,9 @@ import sys
 import os
 import secrets
 import string
+import math
 from datetime import datetime, timedelta
+from urllib.parse import parse_qs, unquote, urlsplit
 
 # ========== CONFIGURATION ==========
 PORT = 8000
@@ -35,6 +37,8 @@ LOG_DIR.mkdir(exist_ok=True)
 LOG_FILE = LOG_DIR / "server.log"
 MAX_LOG_LINES = 8000          # เก็บ log สูงสุดกี่บรรทัด (เกินตัดเก่าทิ้ง)
 DEFAULT_LOG_TAIL = 60         # เมนูดู log แสดงล่าสุดกี่บรรทัด
+MAX_JSON_BODY = 32 * 1024 * 1024
+STATIC_FILES = {"index.html", "admin.html", "app.js", "admin.js", "style.css"}
 
 DISCORD_KEY_HOURS = 24          # คีย์จากบอท /getkey ใช้ได้ 24 ชม.
 PERMANENT_THRESHOLD = 10000     # สร้างระบุชั่วโมง >= 10000 = ถาวร
@@ -254,17 +258,27 @@ def load_data(ws_id):
     try:
         with open(p, "r", encoding="utf-8") as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError(f"workspace data is not an object: {p.name}")
         if "rounds" not in data:
             data["rounds"] = {}
+        if not isinstance(data["rounds"], dict):
+            raise ValueError(f"workspace rounds are invalid: {p.name}")
         if "currentDate" not in data:
             data["currentDate"] = datetime.now().strftime("%Y-%m-%d")
         return data
     except json.JSONDecodeError:
         backups = sorted(BACKUP.glob(f"ws-{normalize_key(ws_id)}-*.json"), reverse=True)
         if backups:
-            with open(backups[0], "r", encoding="utf-8") as f:
-                return json.load(f)
-        return default_data()
+            try:
+                with open(backups[0], "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, dict) or not isinstance(data.get("rounds", {}), dict):
+                    raise ValueError(f"workspace backup has invalid format: {backups[0].name}")
+                return data
+            except (OSError, json.JSONDecodeError) as e:
+                raise ValueError(f"workspace and backup are unreadable: {p.name}") from e
+        raise ValueError(f"workspace data is corrupt and has no backup: {p.name}")
 
 def save_data(ws_id, data):
     p = ws_path(ws_id)
@@ -322,6 +336,73 @@ def find_cloudflared():
 
 # ========== WEB SERVER ==========
 class Handler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(ROOT), **kwargs)
+
+    def _read_json_body(self):
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except (TypeError, ValueError):
+            self._send_json(400, {"error": "invalid_content_length"})
+            return None
+        if length < 1:
+            self._send_json(400, {"error": "empty_request_body"})
+            return None
+        if length > MAX_JSON_BODY:
+            self._send_json(413, {"error": "request_body_too_large"})
+            return None
+        try:
+            data = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            self._send_json(400, {"error": "invalid_json"})
+            return None
+        if not isinstance(data, dict):
+            self._send_json(400, {"error": "json_object_required"})
+            return None
+        if "rounds" in data and not isinstance(data["rounds"], dict):
+            self._send_json(400, {"error": "rounds_must_be_an_object"})
+            return None
+        if "items" in data and not isinstance(data["items"], list):
+            self._send_json(400, {"error": "items_must_be_an_array"})
+            return None
+        for round_data in data.get("rounds", {}).values():
+            if not isinstance(round_data, dict) or not isinstance(round_data.get("items", []), list):
+                self._send_json(400, {"error": "invalid_round_data"})
+                return None
+            if any(not self._valid_item(item) for item in round_data.get("items", [])):
+                self._send_json(400, {"error": "invalid_item_data"})
+                return None
+        if any(not self._valid_item(item) for item in data.get("items", [])):
+            self._send_json(400, {"error": "invalid_item_data"})
+            return None
+        return data
+
+    @staticmethod
+    def _valid_item(item):
+        if not isinstance(item, dict) or not isinstance(item.get("number"), str):
+            return False
+        amounts = item.get("amounts", [])
+        return (
+            isinstance(amounts, list)
+            and all(
+                (isinstance(amount, int) or isinstance(amount, float) and math.isfinite(amount))
+                and not isinstance(amount, bool)
+                for amount in amounts
+            )
+        )
+
+    def _serve_static(self, head=False):
+        requested = unquote(urlsplit(self.path).path)
+        name = "index.html" if requested == "/" else requested.lstrip("/")
+        if name not in STATIC_FILES or "/" in name or "\\" in name:
+            self.send_error(404)
+            return
+        self.path = "/" + name
+        if head:
+            super().do_HEAD()
+        else:
+            super().do_GET()
+
     def _send_json(self, code, obj):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
@@ -340,14 +421,9 @@ class Handler(SimpleHTTPRequestHandler):
         return entry, normalize_key(key)
 
     def do_GET(self):
-        path = self.path.split("?", 1)[0]
+        path = urlsplit(self.path).path
         if path == "/api/verify":
-            q = self.path.split("?", 1)[1] if "?" in self.path else ""
-            key = ""
-            for part in q.split("&"):
-                if part.startswith("key="):
-                    from urllib.parse import unquote
-                    key = unquote(part[4:])
+            key = parse_qs(urlsplit(self.path).query).get("key", [""])[0]
             entry = find_key(key)
             if entry:
                 self._send_json(200, {
@@ -364,8 +440,13 @@ class Handler(SimpleHTTPRequestHandler):
             if not entry:
                 self._send_json(403, {"error": "invalid_or_expired_key"}); return
             with _lock:
-                data = load_data(ws_id)
-                keys = load_keys()
+                try:
+                    data = load_data(ws_id)
+                    keys = load_keys()
+                except (OSError, ValueError) as e:
+                    log(f"Failed to load workspace {ws_id}: {e}")
+                    self._send_json(500, {"error": "data_unavailable"})
+                    return
             now = datetime.now()
             active = [k for k in keys if not is_expired(k, now)]
             self._send_json(200, {
@@ -381,35 +462,56 @@ class Handler(SimpleHTTPRequestHandler):
             if not entry:
                 self._send_json(403, {"error": "invalid_or_expired_key"}); return
             with _lock:
-                data = load_data(ws_id)
+                try:
+                    data = load_data(ws_id)
+                except (OSError, ValueError) as e:
+                    log(f"Failed to load workspace {ws_id}: {e}")
+                    self._send_json(500, {"error": "data_unavailable"})
+                    return
             self._send_json(200, data)
             return
-        super().do_GET()
+        self._serve_static()
+
+    def do_HEAD(self):
+        if urlsplit(self.path).path.startswith("/api/"):
+            self.send_error(404)
+            return
+        self._serve_static(head=True)
 
     def do_POST(self):
-        path = self.path.split("?", 1)[0]
+        path = urlsplit(self.path).path
         if path == "/api/data":
             entry, ws_id = self._auth_ws()
             if not entry:
                 self._send_json(403, {"error": "invalid_or_expired_key"}); return
-            length = int(self.headers.get("Content-Length", 0))
-            raw = self.rfile.read(length).decode("utf-8")
+            data = self._read_json_body()
+            if data is None:
+                return
             try:
-                data = json.loads(raw)
                 save_data(ws_id, data)
                 self._send_json(200, {"ok": True})
-            except Exception as e:
-                self._send_json(400, {"error": str(e)})
+            except (OSError, TypeError, ValueError) as e:
+                log(f"Failed to save workspace {ws_id}: {e}")
+                self._send_json(500, {"error": "save_failed"})
             return
         if path == "/api/delete_date":
             entry, ws_id = self._auth_ws()
             if not entry:
                 self._send_json(403, {"error": "invalid_or_expired_key"}); return
-            length = int(self.headers.get("Content-Length", 0))
-            raw = self.rfile.read(length).decode("utf-8")
+            body = self._read_json_body()
+            if body is None:
+                return
+            date = body.get("date")
+            if not isinstance(date, str):
+                self._send_json(400, {"error": "invalid_date"})
+                return
+            date = date.strip()
             try:
-                body = json.loads(raw)
-                date = (body.get("date") or "").strip()
+                datetime.strptime(date, "%Y-%m-%d")
+            except ValueError:
+                self._send_json(400, {"error": "invalid_date"})
+                return
+            try:
                 deleted = False
                 with _lock:
                     data = load_data(ws_id)
@@ -420,8 +522,9 @@ class Handler(SimpleHTTPRequestHandler):
                 if deleted:
                     log(f"ลบงวด {date} ใน workspace {ws_id}")
                 self._send_json(200, {"ok": True, "deleted": deleted})
-            except Exception as e:
-                self._send_json(400, {"error": str(e)})
+            except (OSError, TypeError, ValueError) as e:
+                log(f"Failed to delete date {date} in workspace {ws_id}: {e}")
+                self._send_json(500, {"error": "delete_failed"})
             return
         self.send_error(404)
 
@@ -432,7 +535,7 @@ class Handler(SimpleHTTPRequestHandler):
             code = str(args[1]) if len(args) > 1 else "?"
             parts = req.split()
             method = parts[0] if parts else "?"
-            path = parts[1] if len(parts) > 1 else "?"
+            path = urlsplit(parts[1]).path if len(parts) > 1 else "?"
             friendly = {
                 "/index.html": "เปิดหน้าบันทึกเลข",
                 "/admin.html": "เปิดหน้าแดชบอร์ด (admin)",
@@ -440,6 +543,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "/admin.js": "โหลดไฟล์แดชบอร์ด",
                 "/style.css": "โหลดสไตล์เว็บ",
                 "/api/data": "บันทึก/ดึงข้อมูลสลาก",
+                "/api/verify": "ตรวจสอบคีย์",
             }.get(path, f"เรียก {path}")
             log(f"[{ip}] {method} {friendly} → สถานะ {code}")
         except Exception:
@@ -449,12 +553,12 @@ def _run_server_background():
     global server_instance, server_running
     try:
         server_instance.serve_forever()
-    except Exception:
-        pass
+    except Exception as e:
+        log(f"Web server stopped unexpectedly: {e}")
     server_running = False
 
 def start_server(with_tunnel=False, auto=False):
-    global server_thread, server_instance, server_running, tunnel_proc
+    global server_thread, server_instance, server_running, tunnel_proc, tunnel_url
     if server_running:
         if not auto:
             print(f"{C.Y}⚠️  Server is already running!{C.END}")
@@ -541,7 +645,18 @@ def start_server(with_tunnel=False, auto=False):
         print(f"{C.Y}💡 Server runs in background — you can use other menus now{C.END}")
         print(f"{C.R}⏹ Select 'Stop Server' from menu to shut down{C.END}")
         print("="*60)
-    server_instance = ThreadingHTTPServer((BIND_IP, PORT), Handler)
+    try:
+        server_instance = ThreadingHTTPServer((BIND_IP, PORT), Handler)
+    except OSError as e:
+        if tunnel_proc:
+            tunnel_proc.terminate()
+            tunnel_proc = None
+        server_running = False
+        print(f"{C.R}❌ เปิดเว็บเซิร์ฟเวอร์ไม่ได้: {e}{C.END}")
+        log(f"Web server failed to bind {BIND_IP}:{PORT}: {e}")
+        if not auto:
+            wait_enter()
+        return
     server_running = True
     server_thread = threading.Thread(target=_run_server_background, daemon=True)
     server_thread.start()
@@ -550,7 +665,7 @@ def start_server(with_tunnel=False, auto=False):
         wait_enter()
 
 def stop_server():
-    global server_instance, server_running, tunnel_proc
+    global server_instance, server_running, tunnel_proc, tunnel_url
     if not server_running:
         print(f"{C.Y}⚠️  Server is not running{C.END}")
         wait_enter(); return

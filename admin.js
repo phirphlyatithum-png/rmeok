@@ -9,6 +9,11 @@ function storeKey(k, remember){
 }
 function clearKey(){ localStorage.removeItem("lottery_key"); sessionStorage.removeItem("lottery_key"); }
 function money(v){ return Number(v).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function escapeHtml(value){
+  return String(value??"").replace(/[&<>"']/g,char=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  })[char]);
+}
 
 function showLock(msg){ document.body.classList.add("locked"); $("lockOverlay").style.display="flex"; $("keyMsg").textContent=msg||""; $("keyInput").focus(); }
 function hideLock(){ document.body.classList.remove("locked"); $("lockOverlay").style.display="none"; }
@@ -58,13 +63,17 @@ function grouped(items){
 
 async function loadDashboard(){
   try{
-    const s=await (await apiFetch("/api/status")).json();
+    const statusResponse=await apiFetch("/api/status");
+    if(!statusResponse.ok) throw new Error(`status failed (${statusResponse.status})`);
+    const s=await statusResponse.json();
     $("cDates").textContent=s.dates_stored;
     $("cActive").textContent=s.active_keys;
     $("cTotal").textContent=s.total_keys;
     serverOffset=Date.parse(s.server_time)-Date.now();
     startClock(); updateClock();
-    const data=await (await apiFetch("/api/data")).json();
+    const dataResponse=await apiFetch("/api/data");
+    if(!dataResponse.ok) throw new Error(`data failed (${dataResponse.status})`);
+    const data=await dataResponse.json();
     const rounds=data.rounds||{};
     const rows=$("dateRows");
     const dates=Object.keys(rounds).sort().reverse();
@@ -72,7 +81,8 @@ async function loadDashboard(){
     rows.innerHTML=dates.map(d=>{
       const r=rounds[d]||{}; const items=r.items||[];
       const total=items.reduce((s,it)=>s+(it.amounts||[]).reduce((a,b)=>a+b,0),0);
-      return `<tr class="clickable" data-date="${d}"><td>${d}</td><td>${r.billNo||"-"}</td><td>${r.customer||"-"}</td><td>${items.length}</td><td><b>${money(total)}</b></td><td><button class="delDate" data-date="${d}" title="ลบงวดนี้">🗑 ลบ</button></td></tr>`;
+      const safeDate=escapeHtml(d);
+      return `<tr class="clickable" data-date="${safeDate}"><td>${safeDate}</td><td>${escapeHtml(r.billNo||"-")}</td><td>${escapeHtml(r.customer||"-")}</td><td>${items.length}</td><td><b>${money(total)}</b></td><td><button class="delDate" data-date="${safeDate}" title="ลบงวดนี้">🗑 ลบ</button></td></tr>`;
     }).join("");
     rows.querySelectorAll("tr.clickable").forEach(tr=>{
       tr.onclick=()=>showDetail(tr.dataset.date, rounds[tr.dataset.date]);
@@ -80,7 +90,9 @@ async function loadDashboard(){
     rows.querySelectorAll(".delDate").forEach(btn=>{
       btn.onclick=(e)=>{ e.stopPropagation(); deleteDate(btn.dataset.date); };
     });
-  }catch(e){}
+  }catch(e){
+    $("dateRows").innerHTML='<tr><td colspan="6" class="muted">โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่</td></tr>';
+  }
 }
 
 function showDetail(date, r){
@@ -91,7 +103,7 @@ function showDetail(date, r){
   const grand=g.reduce((s,x)=>s+x.total,0);
   $("detailBody").innerHTML=
     `<table class="admin"><thead><tr><th>เลข</th>${CATS.map(c=>`<th>${c}</th>`).join("")}<th>รวม</th></tr></thead><tbody>`+
-    g.map(x=>`<tr><td><b>${x.number}</b></td>${x.amounts.map(v=>`<td>${money(v)}</td>`).join("")}<td><b>${money(x.total)}</b></td></tr>`).join("")+
+    g.map(x=>`<tr><td><b>${escapeHtml(x.number)}</b></td>${x.amounts.map(v=>`<td>${money(v)}</td>`).join("")}<td><b>${money(x.total)}</b></td></tr>`).join("")+
     `<tr><td colspan="6" style="text-align:right"><b>ยอดรวมทั้งหมด ${money(grand)}</b></td></tr></tbody></table>`;
   d.scrollIntoView({behavior:"smooth"});
 }
@@ -108,14 +120,17 @@ function startClock(){
 async function deleteDate(d){
   if(!confirm(`⚠️ ลบงวดวันที่ ${d} ทั้งหมดจริงหรือไม่? (ลบแล้วกู้ไม่ได้)`)) return;
   try{
-    await apiFetch("/api/delete_date",{
+    const response=await apiFetch("/api/delete_date",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({date:d})
     });
+    if(!response.ok) throw new Error(`delete failed (${response.status})`);
     $("detail").classList.remove("show");
-    loadDashboard();
-  }catch(e){}
+    await loadDashboard();
+  }catch(e){
+    $("dateRows").innerHTML='<tr><td colspan="6" class="muted">ลบงวดไม่สำเร็จ กรุณาลองใหม่</td></tr>';
+  }
 }
 
 (async function boot(){

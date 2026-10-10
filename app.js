@@ -11,6 +11,8 @@ const TOD_RECORD_INDEX=2;  // บันทึกเป็น "3 ตัวตร�
 let state={ currentDate:"", rounds:{} };
 let ACCESS_KEY=localStorage.getItem("lottery_key")||sessionStorage.getItem("lottery_key")||"";
 let lastSyncJson="";
+let saveQueue=Promise.resolve();
+let autoSyncInProgress=false;
 function storeKey(k, remember){
   if(remember){ localStorage.setItem("lottery_key",k); sessionStorage.removeItem("lottery_key"); }
   else { sessionStorage.setItem("lottery_key",k); localStorage.removeItem("lottery_key"); }
@@ -21,7 +23,10 @@ function uid(){
   if(window.crypto&&crypto.randomUUID) return crypto.randomUUID();
   return "id-"+Date.now()+"-"+Math.random().toString(36).slice(2);
 }
-function todayStr(){ return new Date().toISOString().slice(0,10); }
+function todayStr(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
 function cur(){
   if(!state.rounds[state.currentDate]){
     state.rounds[state.currentDate]={billNo:"0",customer:"",items:[]};
@@ -120,8 +125,12 @@ async function load(){
   let data=null;
   try{
     const r=await apiFetch("/api/data");
-    if(r.ok) data=await r.json();
-  }catch(e){ return; }
+    if(!r.ok) throw new Error(`load failed (${r.status})`);
+    data=await r.json();
+  }catch(e){
+    if(e.message!=="forbidden") $("saveState").textContent="โหลดข้อมูลไม่ได้";
+    return;
+  }
   if(data && Array.isArray(data.items)){
     const d=data.date||todayStr();
     state={ currentDate:d, rounds:{ [d]:{ billNo:data.billNo||"0", customer:data.customer||"", items:data.items||[] } } };
@@ -147,20 +156,27 @@ function refreshRoundFields(){
   $("billNo").value=cur().billNo||"0";
   $("customer").value=cur().customer||"";
 }
-async function save(){
+function save(){
   cur().billNo=$("billNo").value;
   cur().customer=$("customer").value;
-  try{
-    await apiFetch("/api/data",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(state)
-    });
-    lastSyncJson=JSON.stringify(state);
-    $("saveState").textContent="บันทึกแล้ว "+new Date().toLocaleTimeString("th-TH");
-  }catch(e){
-    $("saveState").textContent="บันทึกไม่ได้";
-  }
+  const payload=JSON.stringify(state);
+  saveQueue=saveQueue.catch(()=>{}).then(async()=>{
+    $("saveState").textContent="กำลังบันทึก...";
+    try{
+      const r=await apiFetch("/api/data",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:payload
+      });
+      if(!r.ok) throw new Error(`save failed (${r.status})`);
+      lastSyncJson=payload;
+      if(payload===JSON.stringify(state))
+        $("saveState").textContent="บันทึกแล้ว "+new Date().toLocaleTimeString("th-TH");
+    }catch(e){
+      $("saveState").textContent="บันทึกไม่ได้";
+    }
+  });
+  return saveQueue;
 }
 function switchDate(d){
   if(!d) return;
@@ -242,11 +258,17 @@ function rowHtml(item){
   const parts=item.amounts
     .map((v,i)=>`<b class="cat c${i}">${CAT_SHORT[i]}</b> ${money(v)}`)
     .filter((_,i)=>item.amounts[i]>0);
-  return `<div class="row" data-number="${item.number}">
-    <span class="num">${item.number}</span>
+  const number=escapeHtml(item.number);
+  return `<div class="row" data-number="${number}">
+    <span class="num">${number}</span>
     <span class="vals">${parts.join(" · ")||"-"}</span>
     <span class="sum">รวม ${money(item.total)}</span>
   </div>`;
+}
+function escapeHtml(value){
+  return String(value??"").replace(/[&<>"']/g,char=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  })[char]);
 }
 function render(){
   const groups=grouped();
@@ -259,11 +281,11 @@ function render(){
   $("list3").innerHTML=
     groups.filter(x=>x.number.length===3).sort(byNum).map(rowHtml).join("")||"<div>ยังไม่มีรายการ</div>";
   const histGroups=[];
-  const seen=new Set();
+  const seen=new Map();
   items().slice().reverse().forEach(item=>{
     const key=item.todGroup||item.id;
-    if(seen.has(key)){ histGroups.find(g=>g.key===key).items.push(item); return; }
-    seen.add(key);
+    if(seen.has(key)){ histGroups[seen.get(key)].items.push(item); return; }
+    seen.set(key,histGroups.length);
     histGroups.push({key, items:[item]});
   });
   $("history").innerHTML=histGroups.map(g=>{
@@ -271,12 +293,12 @@ function render(){
     const gTotal=g.items.reduce((s,it)=>s+it.amounts.reduce((a,b)=>a+b,0),0);
     let numText=first.number;
     if(first.todGroup){
-      numText=`${first.todBase} <span class="todtag">(${first.todKind} กลับ ×${g.items.length})</span>`;
+      numText=`${escapeHtml(first.todBase)} <span class="todtag">(${escapeHtml(first.todKind)} กลับ ×${g.items.length})</span>`;
     }
     const parts=first.amounts
       .map((v,i)=>`<b class="cat c${i}">${CAT_SHORT[i]}</b> ${money(v)}`)
       .filter((_,i)=>first.amounts[i]>0);
-    return `<div class="row" data-id="${g.key}">
+    return `<div class="row" data-id="${escapeHtml(g.key)}">
       <span class="num">${numText}</span>
       <span class="vals">${parts.join(" · ")||"-"}</span>
       <span class="sum">รวม ${money(gTotal)}</span>
@@ -360,6 +382,7 @@ $("exportCsv").onclick=()=>{
   a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));
   a.download=`number-tally-${state.currentDate||"data"}.csv`;
   a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };
 
 // ============ KEY UI wiring ============
@@ -369,11 +392,22 @@ $("keyBtn").onclick=()=>{ $("keyInput").value=""; showLock(); };
 
 // ===== Auto-sync: ดึงข้อมูลล่าสุดทุก 4 วิ คนอื่นเพิ่มรายการ เราเห็นเลย ไม่ต้องรีเฟรช =====
 async function autoSync(){
-  if(!ACCESS_KEY) return;
+  if(!ACCESS_KEY||autoSyncInProgress) return;
+  autoSyncInProgress=true;
   try{
     const r=await apiFetch("/api/data");
-    if(!r.ok) return;
+    if(!r.ok) throw new Error(`sync failed (${r.status})`);
     const data=await r.json();
+    if(!data||!data.rounds||typeof data.rounds!=="object") return;
+    if(!data.currentDate) data.currentDate=todayStr();
+    Object.values(data.rounds).forEach(round=>{
+      if(!round||typeof round!=="object") return;
+      if(!Array.isArray(round.items)) round.items=[];
+      round.items.forEach(it=>{
+        if(!Array.isArray(it.amounts)) it.amounts=[];
+        while(it.amounts.length<CATS.length) it.amounts.push(0);
+      });
+    });
     const j=JSON.stringify(data);
     if(j===lastSyncJson) return;                       // ข้อมูลเท่าเดิม
     if(JSON.stringify(state)!==lastSyncJson) return;   // เรากำลังมีข้อมูลที่ยังไม่บันทึก → ข้ามก่อน
@@ -382,19 +416,17 @@ async function autoSync(){
     const vals={};
     ["number","billNo","customer",...CAT_IDS].forEach(id=>{ if($(id)) vals[id]=$(id).value; });
     state=data;
-    Object.values(state.rounds).forEach(r=>{
-      (r.items||[]).forEach(it=>{
-        if(!Array.isArray(it.amounts)) it.amounts=[];
-        while(it.amounts.length<CATS.length) it.amounts.push(0);
-      });
-    });
     refreshRoundFields();
     updateCatVisibility();
     render();
     Object.keys(vals).forEach(id=>{ if($(id)) $(id).value=vals[id]; });
     if(focused && $(focused)){ $(focused).focus(); try{$(focused).setSelectionRange(999,999);}catch(e){} }
-    lastSyncJson=j;
-  }catch(e){}
+    lastSyncJson=JSON.stringify(state);
+  }catch(e){
+    if(e.message!=="forbidden") $("saveState").textContent="ซิงก์ไม่ได้";
+  }finally{
+    autoSyncInProgress=false;
+  }
 }
 setInterval(autoSync, 4000);
 

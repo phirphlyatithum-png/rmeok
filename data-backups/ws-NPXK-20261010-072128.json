@@ -1,0 +1,56 @@
+{
+  "currentDate": "2026-10-10",
+  "rounds": {
+    "2026-10-10": {
+      "billNo": "0",
+      "customer": "",
+      "items": [
+        {
+          "id": "ccf74d13-87b4-4532-b22c-0dcd8826a994",
+          "number": "001",
+          "amounts": [
+            0,
+            0,
+            100,
+            0,
+            0
+          ],
+          "time": "2026-10-10T07:21:22.015Z",
+          "todGroup": "8f2dc197-418b-4c68-bf83-df8873bd19ae",
+          "todBase": "100",
+          "todKind": 3
+        },
+        {
+          "id": "e768ed13-7fe6-4720-b122-217d26e2200b",
+          "number": "010",
+          "amounts": [
+            0,
+            0,
+            100,
+            0,
+            0
+          ],
+          "time": "2026-10-10T07:21:22.015Z",
+          "todGroup": "8f2dc197-418b-4c68-bf83-df8873bd19ae",
+          "todBase": "100",
+          "todKind": 3
+        },
+        {
+          "id": "30c827da-d8dd-47f5-926b-6b914ecb72b7",
+          "number": "100",
+          "amounts": [
+            0,
+            0,
+            100,
+            0,
+            0
+          ],
+          "time": "2026-10-10T07:21:22.015Z",
+          "todGroup": "8f2dc197-418b-4c68-bf83-df8873bd19ae",
+          "todBase": "100",
+          "todKind": 3
+        }
+      ]
+    }
+  }
+}
